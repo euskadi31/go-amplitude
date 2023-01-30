@@ -3,7 +3,7 @@ module github.com/euskadi31/go-amplitude
 go 1.17
 
 require (
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.29.0
 	github.com/stretchr/testify v1.8.1
 )
 
