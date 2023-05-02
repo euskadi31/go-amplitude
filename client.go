@@ -101,7 +101,7 @@ func (c *client) loop() {
 		case event := <-c.msgs:
 			c.events = append(c.events, event)
 
-			if len(c.events) == cap(c.events) {
+			if len(c.events) == c.bufferSize {
 				c.flush()
 			}
 
