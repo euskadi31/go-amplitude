@@ -8,7 +8,7 @@ import "fmt"
 
 type RequestPayload struct {
 	APIKey  string          `json:"api_key"`
-	Events  []Event         `json:"events"`
+	Events  []*Event        `json:"events"`
 	Options *PayloadOptions `json:"options,omitempty"`
 }
 

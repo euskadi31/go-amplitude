@@ -44,8 +44,8 @@ func TestClient(t *testing.T) {
 	c := New(
 		"foo",
 		WithURL(ts.URL),
-		WithTimeout(time.Second*2),
-		WithInterval(time.Second*5),
+		WithTimeout(time.Second*1),
+		WithInterval(time.Millisecond*100),
 		WithBatchSize(2),
 		WithBufferSize(2),
 		WithMaxRetry(2),
@@ -107,8 +107,8 @@ func TestClientWithRetry(t *testing.T) {
 	c := New(
 		"foo",
 		WithURL(ts.URL),
-		WithTimeout(time.Second*2),
-		WithInterval(time.Second*5),
+		WithTimeout(time.Second*1),
+		WithInterval(time.Millisecond*100),
 		WithBatchSize(2),
 		WithBufferSize(2),
 		WithMaxRetry(2),
@@ -151,8 +151,8 @@ func TestClientDroppedMessage(t *testing.T) {
 	c := New(
 		"foo",
 		WithURL(ts.URL),
-		WithTimeout(time.Second*2),
-		WithInterval(time.Second*5),
+		WithTimeout(time.Second*1),
+		WithInterval(time.Millisecond*100),
 		WithBatchSize(2),
 		WithBufferSize(2),
 		WithMaxRetry(2),
@@ -208,7 +208,7 @@ func TestClientWithMultipleEvents(t *testing.T) {
 		case 0:
 			assert.Equal(t, 2, len(msg.Events))
 		case 1:
-			assert.Equal(t, 1, len(msg.Events))
+			assert.Equal(t, 2, len(msg.Events))
 		}
 	}))
 	defer ts.Close()
@@ -216,16 +216,30 @@ func TestClientWithMultipleEvents(t *testing.T) {
 	c := New(
 		"foo",
 		WithURL(ts.URL),
-		WithTimeout(time.Second*2),
-		WithInterval(time.Second*5),
+		WithTimeout(time.Second*1),
+		WithInterval(time.Millisecond*500),
 		WithBatchSize(2),
-		WithBufferSize(2),
+		WithBufferSize(3),
 		WithMaxRetry(2),
-		WithRetryInterval(time.Second*5),
+		WithRetryInterval(time.Millisecond*100),
 	)
 	defer c.Close()
 
 	err := c.Enqueue(&Event{
+		UserID:      "f892be22-8f8e-445d-83b0-af199b9a5c72",
+		DeviceID:    "0a16e988-8f70-4877-bdc6-08997832cfff",
+		Timestamp:   1643367217,
+		EventType:   "user.created",
+		Platform:    "ios",
+		OSName:      "iOS",
+		OSVersion:   "15.2.1",
+		DeviceModel: "iPhone13,3",
+		Language:    "fr-FR",
+		InsertID:    "a5461410-6b12-4a7a-905d-166cc00af4b2",
+	})
+	assert.NoError(t, err)
+
+	err = c.Enqueue(&Event{
 		UserID:      "f892be22-8f8e-445d-83b0-af199b9a5c72",
 		DeviceID:    "0a16e988-8f70-4877-bdc6-08997832cfff",
 		Timestamp:   1643367217,
@@ -298,12 +312,12 @@ func TestClientClose(t *testing.T) {
 	c := New(
 		"foo",
 		WithURL(ts.URL),
-		WithTimeout(time.Second*2),
-		WithInterval(time.Second*10),
+		WithTimeout(time.Second*1),
+		WithInterval(time.Second*2),
 		WithBatchSize(2),
 		WithBufferSize(2),
 		WithMaxRetry(2),
-		WithRetryInterval(time.Second*5),
+		WithRetryInterval(time.Second*2),
 	)
 
 	err := c.Enqueue(&Event{
@@ -324,3 +338,81 @@ func TestClientClose(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestClientGetBatchEvents(t *testing.T) {
+
+	c := &client{
+		timeout:       time.Second * 1,
+		interval:      time.Second * 10,
+		batchSize:     2,
+		bufferSize:    4,
+		maxRetry:      3,
+		retryInterval: time.Second * 1,
+		retrySize:     1000,
+	}
+
+	c.events = []*Event{
+		{
+			UserID: "f892be22-8f8e-445d-83b0-af199b9a5c71",
+		},
+		{
+			UserID: "f892be22-8f8e-445d-83b0-af199b9a5c72",
+		},
+		{
+			UserID: "f892be22-8f8e-445d-83b0-af199b9a5c73",
+		},
+	}
+
+	events := c.getBatchEvents()
+
+	assert.Equal(t, 2, len(events))
+
+	events = c.getBatchEvents()
+
+	assert.Equal(t, 1, len(events))
+}
+
+/*
+func TestClientRace(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	}))
+	defer ts.Close()
+
+	c := New(
+		"foo",
+		WithURL(ts.URL),
+		WithTimeout(time.Second*2),
+		WithInterval(time.Second*10),
+		WithRetryInterval(time.Second*5),
+	).(*client)
+
+	for i := 0; i < 2000; i++ {
+		now := time.Now().Unix()
+		id := uuid.New().String()
+
+		err := c.Enqueue(&Event{
+			UserID:      "f892be22-8f8e-445d-83b0-af199b9a5c72",
+			DeviceID:    "0a16e988-8f70-4877-bdc6-08997832cfff",
+			Timestamp:   now,
+			EventType:   "user.created",
+			Platform:    "ios",
+			OSName:      "iOS",
+			OSVersion:   "15.2.1",
+			DeviceModel: "iPhone13,3",
+			Language:    "fr-FR",
+			InsertID:    id,
+		})
+		assert.NoError(t, err)
+	}
+
+	assert.NoError(t, c.Close())
+
+wait:
+	for {
+		if len(c.msgs) == 0 && len(c.events) == 0 && len(c.retries) == 0 {
+			break wait
+		}
+	}
+}
+*/

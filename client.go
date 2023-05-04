@@ -40,11 +40,12 @@ type client struct {
 	retryInterval time.Duration
 	retrySize     int
 	httpClient    *http.Client
-	msgs          chan Event
-	events        []Event
+	msgs          chan *Event
+	events        []*Event
 	retries       chan *Payload
-	quit          chan struct{}
-	shutdown      chan struct{}
+	quitCh        chan struct{}
+	shutdownCh    chan struct{}
+	flushCh       chan struct{}
 	mtx           sync.Mutex
 }
 
@@ -60,15 +61,16 @@ func New(key string, opts ...Option) Client {
 		maxRetry:      3,
 		retryInterval: time.Second * 1,
 		retrySize:     1000,
-		quit:          make(chan struct{}),
-		shutdown:      make(chan struct{}),
+		quitCh:        make(chan struct{}, 1),
+		shutdownCh:    make(chan struct{}, 1),
+		flushCh:       make(chan struct{}, 1),
 	}
 
 	c.httpClient = &http.Client{
 		Timeout: c.timeout,
 	}
-	c.msgs = make(chan Event, c.bufferSize)
-	c.events = make([]Event, 0, c.bufferSize)
+	c.msgs = make(chan *Event, c.bufferSize)
+	c.events = []*Event{} /*make(, 0, c.bufferSize)*/
 	c.retries = make(chan *Payload, c.retrySize)
 
 	for _, opt := range opts {
@@ -80,14 +82,27 @@ func New(key string, opts ...Option) Client {
 	return c
 }
 
+func (c *client) addEvent(event *Event) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	c.events = append(c.events, event)
+
+	if len(c.events) == c.bufferSize {
+		c.flushCh <- struct{}{}
+	}
+}
+
 func (c *client) loop() {
-	defer close(c.shutdown)
+	defer close(c.shutdownCh)
 
 	tick := time.NewTicker(c.interval)
 	defer tick.Stop()
 
 	for {
 		select {
+		case <-c.flushCh:
+			c.flush()
 		case payload := <-c.retries:
 			if err := c.sendBatch(payload); err != nil {
 				if payload.Attempts > c.maxRetry {
@@ -99,16 +114,12 @@ func (c *client) loop() {
 				c.retries <- payload
 			}
 		case event := <-c.msgs:
-			c.events = append(c.events, event)
-
-			if len(c.events) == c.bufferSize {
-				c.flush()
-			}
+			c.addEvent(event)
 
 		case <-tick.C:
 			c.flush()
 
-		case <-c.quit:
+		case <-c.quitCh:
 			log.Debug().Msg("exit requested - draining messages")
 
 			// Drain the msg channel, we have to close it first so no more
@@ -116,11 +127,7 @@ func (c *client) loop() {
 			close(c.msgs)
 
 			for event := range c.msgs {
-				c.events = append(c.events, event)
-
-				if len(c.events) == cap(c.events) {
-					c.flush()
-				}
+				c.addEvent(event)
 			}
 
 			c.flush()
@@ -142,16 +149,16 @@ func (c *client) loop() {
 
 func (c *client) Close() (err error) {
 	defer func() {
-		// Always recover, a panic could be raised if `c`.quit was closed which
+		// Always recover, a panic could be raised if `c`.quitCh was closed which
 		// means the method was called more than once.
 		if recover() != nil {
 			err = ErrClosed
 		}
 	}()
 
-	close(c.quit)
+	close(c.quitCh)
 
-	<-c.shutdown
+	<-c.shutdownCh
 
 	return
 }
@@ -208,12 +215,12 @@ func (c *client) sendBatch(payload *Payload) error {
 	return nil
 }
 
-func (c *client) flush() error {
+func (c *client) getBatchEvents() []*Event {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	if len(c.events) == 0 {
-		return nil
+		return []*Event{}
 	}
 
 	end := c.batchSize
@@ -221,9 +228,19 @@ func (c *client) flush() error {
 		end = length
 	}
 
-	var events []Event
+	var events []*Event
 
 	events, c.events = c.events[0:end], c.events[end:]
+
+	return events
+}
+
+func (c *client) flush() error {
+	events := c.getBatchEvents()
+
+	if len(events) == 0 {
+		return nil
+	}
 
 	reqPayload := &RequestPayload{
 		APIKey: c.key,
@@ -262,13 +279,11 @@ func (c *client) Enqueue(event *Event) (err error) {
 		}
 	}()
 
-	c.msgs <- *event
-
-	if len(c.msgs) == cap(c.msgs) {
-		go func() {
-			err = c.flush()
-		}()
+	if len(c.msgs) == (cap(c.msgs) - 1) {
+		c.flushCh <- struct{}{}
 	}
+
+	c.msgs <- event
 
 	return
 }
