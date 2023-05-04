@@ -36,7 +36,7 @@ endif
 lint:
 ifeq (, $(shell which golangci-lint))
 	@echo "Install golangci-lint..."
-	@curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ${GOPATH}/bin v1.41.1
+	@curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ${GOPATH}/bin v1.52.2
 endif
 	@echo "lint..."
 	@golangci-lint run --timeout=300s ./...

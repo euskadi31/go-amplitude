@@ -188,6 +188,7 @@ func (c *client) sendBatch(payload *Payload) error {
 
 		return fmt.Errorf("http client send request failed: %w", err)
 	}
+
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			log.Error().Err(err).Msg("http client close response body failed")

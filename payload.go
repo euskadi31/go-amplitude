@@ -22,31 +22,6 @@ type Payload struct {
 	Size     int
 }
 
-/*
-*
-
-	{
-	  "code": 400,
-	  "error": "Request missing required field",
-	  "missing_field": "api_key",
-	  "events_with_invalid_fields": {
-	    "time": [
-	      3,
-	      4,
-	      7
-	    ]
-	  },
-	  "events_with_missing_fields": {
-	    "event_type": [
-	      3,
-	      4,
-	      7
-	    ]
-	  }
-	}
-
-*
-*/
 type ErrorResponse struct {
 	Code         int    `json:"code"`
 	ErrorMessage string `json:"error"`

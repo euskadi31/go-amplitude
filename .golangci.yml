@@ -51,7 +51,6 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - deadcode
     - depguard
     - errcheck
     - gas
@@ -63,10 +62,8 @@ linters:
     - ineffassign
     - megacheck
     - misspell
-    - structcheck
     - typecheck
     - unconvert
-    - varcheck
     - gosimple
     - staticcheck
     - unused
@@ -83,7 +80,6 @@ linters:
     - gocritic
     - godot
     - gosec
-    - ifshort
     - nestif
     - nilerr
     - nlreturn
