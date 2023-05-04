@@ -40,8 +40,8 @@ type client struct {
 	retryInterval time.Duration
 	retrySize     int
 	httpClient    *http.Client
-	msgs          chan *Event
-	events        []*Event
+	msgs          chan Event
+	events        []Event
 	retries       chan *Payload
 	quit          chan struct{}
 	shutdown      chan struct{}
@@ -67,8 +67,8 @@ func New(key string, opts ...Option) Client {
 	c.httpClient = &http.Client{
 		Timeout: c.timeout,
 	}
-	c.msgs = make(chan *Event, c.bufferSize)
-	c.events = make([]*Event, 0, c.bufferSize)
+	c.msgs = make(chan Event, c.bufferSize)
+	c.events = make([]Event, 0, c.bufferSize)
 	c.retries = make(chan *Payload, c.retrySize)
 
 	for _, opt := range opts {
@@ -156,6 +156,16 @@ func (c *client) Close() (err error) {
 	return
 }
 
+func (c *client) processErrorResponse(resp *http.Response) error {
+	var errorResponse *ErrorResponse
+
+	if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+		return fmt.Errorf("json decode failed: %w", err)
+	}
+
+	return errorResponse
+}
+
 func (c *client) sendBatch(payload *Payload) error {
 	ctx := context.Background()
 
@@ -178,10 +188,16 @@ func (c *client) sendBatch(payload *Payload) error {
 
 		return fmt.Errorf("http client send request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Error().Err(err).Msg("http client close response body failed")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error().Msgf("Amplitude send batch failed: status code %d", resp.StatusCode)
+		err := c.processErrorResponse(resp)
+
+		log.Error().Err(err).Msgf("Amplitude send batch failed: status code %d", resp.StatusCode)
 
 		return ErrBatchFailed
 	}
@@ -204,7 +220,7 @@ func (c *client) flush() error {
 		end = length
 	}
 
-	var events []*Event
+	var events []Event
 
 	events, c.events = c.events[0:end], c.events[end:]
 
@@ -245,7 +261,7 @@ func (c *client) Enqueue(event *Event) (err error) {
 		}
 	}()
 
-	c.msgs <- event
+	c.msgs <- *event
 
 	if len(c.msgs) == cap(c.msgs) {
 		go func() {
