@@ -189,7 +189,7 @@ func (c *client) sendBatch(payload *Payload) error {
 
 	// r.Header.Add("Content-Length", strconv.Itoa(len(data)))
 
-	resp, err := c.httpClient.Do(r)
+	resp, err := c.httpClient.Do(r) //nolint:gosec // endpoint is configured by the library consumer, not user input
 	if err != nil {
 		log.Error().Err(err).Msg("")
 

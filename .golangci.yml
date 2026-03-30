@@ -51,7 +51,7 @@ linters:
     - unused
     - whitespace
     - wrapcheck
-    - wsl
+    - wsl_v5
   exclusions:
     paths:
       - .*_mock\.go
