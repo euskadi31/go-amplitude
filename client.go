@@ -247,7 +247,7 @@ func (c *client) flush() error {
 		Events: events,
 	}
 
-	b, err := json.Marshal(reqPayload)
+	b, err := json.Marshal(reqPayload) // nolint:gosec // API key is configured by the library consumer, not user input
 	if err != nil {
 		return fmt.Errorf("json marshal events failed: %w", err)
 	}
